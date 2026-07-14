@@ -3,3 +3,4 @@
 backups/*.rbxl
 *.rbxl.lock
 *.rbxlx.lock
+.DS_Store
