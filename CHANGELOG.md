@@ -12,3 +12,4 @@
 - Added a non-integrated WP-06B1 ServerDataService skeleton with revision-safe dirty tracking; production persistence and lifecycle wiring remain disabled.
 - Added the WP-06B2 canonical in-memory SessionRepository with isolated defaults, fail-closed migration, and detached recovered sync packets; persistence and lifecycle integration remain deferred.
 - Added WP-06B3 lifecycle integration with a single idempotent player-lifecycle owner, injected sync callbacks, and a non-production in-memory persistence adapter.
+- Added the WP-07A authoritative press-only gameplay slice with Loaded-session enforcement, revision-aware mutation, server rate limiting, and explicit COMMON feedback.
