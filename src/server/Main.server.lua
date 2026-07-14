@@ -18,10 +18,12 @@ local dataSync = remotes:FindFirstChild("DataSync")
 local questSync = remotes:FindFirstChild("QuestSync")
 local pressCore = remotes:FindFirstChild("PressCore")
 local pressFeedback = remotes:FindFirstChild("PressFeedback")
+local buyUpgrade = remotes:FindFirstChild("BuyUpgrade")
 assert(dataSync ~= nil and dataSync:IsA("RemoteEvent"), "[LCA] Remotes.DataSync must be a RemoteEvent")
 assert(questSync ~= nil and questSync:IsA("RemoteEvent"), "[LCA] Remotes.QuestSync must be a RemoteEvent")
 assert(pressCore ~= nil and pressCore:IsA("RemoteEvent"), "[LCA] Remotes.PressCore must be a RemoteEvent")
 assert(pressFeedback ~= nil and pressFeedback:IsA("RemoteEvent"), "[LCA] Remotes.PressFeedback must be a RemoteEvent")
+assert(buyUpgrade ~= nil and buyUpgrade:IsA("RemoteEvent"), "[LCA] Remotes.BuyUpgrade must be a RemoteEvent")
 
 local function sendDataSync(player: Player, packet: any)
 	dataSync:FireClient(player, packet)
@@ -46,6 +48,7 @@ GameplayService.init({
 GameplayRemoteController.init({
 	pressCore = pressCore,
 	pressFeedback = pressFeedback,
+	buyUpgrade = buyUpgrade,
 	gameplayService = GameplayService,
 })
 

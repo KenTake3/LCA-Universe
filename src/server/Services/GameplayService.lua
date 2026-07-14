@@ -11,10 +11,21 @@ export type ResultCode =
 	| "BUSY"
 	| "INVALID_DATA"
 	| "INVALID_REWARD"
+	| "INVALID_UPGRADE"
+	| "MAX_LEVEL"
+	| "INVALID_COST"
+	| "INSUFFICIENT_ENERGY"
 	| "DIRTY_FAILED"
 
 export type PressResult = {
 	reward: number,
+	syncSucceeded: boolean,
+}
+
+export type UpgradePurchaseResult = {
+	upgradeId: string,
+	cost: number,
+	newLevel: number,
 	syncSucceeded: boolean,
 }
 
@@ -36,6 +47,12 @@ local GameplayService = {}
 local dependencies: Dependencies? = nil
 local MAX_SAFE_INTEGER = 9_007_199_254_740_991
 local UPGRADE_IDS = { "ClickPower", "AutoPower", "CoreAmplifier", "Luck" }
+local SUPPORTED_UPGRADES = {
+	ClickPower = true,
+	AutoPower = true,
+	CoreAmplifier = true,
+	Luck = true,
+}
 
 local function isFiniteNumber(value: any): boolean
 	return type(value) == "number"
@@ -123,6 +140,29 @@ local function upgradeLimit(upgradeId: string): number?
 		end
 	end
 	return nil
+end
+
+local function exactUpgradeLimit(upgradeId: string): number?
+	if type(Config.Upgrades) ~= "table" or type(Config.Security) ~= "table" then
+		return nil
+	end
+	local securityLimit = configuredNonNegativeCap(Config.Security.MaxUpgradeLevel)
+	if securityLimit == nil then
+		return nil
+	end
+
+	local definitionLimit: number? = nil
+	local matches = 0
+	for _, upgrade in ipairs(Config.Upgrades) do
+		if type(upgrade) == "table" and upgrade.id == upgradeId then
+			matches += 1
+			definitionLimit = configuredNonNegativeCap(upgrade.maxLevel)
+		end
+	end
+	if matches ~= 1 or definitionLimit == nil then
+		return nil
+	end
+	return math.min(securityLimit, definitionLimit)
 end
 
 local function validSessionMetadata(session: any): boolean
@@ -238,6 +278,98 @@ function GameplayService.press(player: Player): (boolean, ResultCode, PressResul
 	local syncSucceeded = configured.dataService.syncToClient(player)
 	return true, "OK", table.freeze({
 		reward = reward,
+		syncSucceeded = syncSucceeded,
+	})
+end
+
+function GameplayService.buyUpgrade(
+	player: Player,
+	upgradeId: string
+): (boolean, ResultCode, UpgradePurchaseResult?)
+	if not isPlayer(player) then
+		return false, "INVALID_PLAYER", nil
+	end
+	if type(upgradeId) ~= "string" or not SUPPORTED_UPGRADES[upgradeId] then
+		return false, "INVALID_UPGRADE", nil
+	end
+	local configured = dependencies
+	if configured == nil then
+		return false, "NOT_FOUND", nil
+	end
+
+	local session = configured.sessions.getSession(player)
+	if session == nil then
+		return false, "NOT_FOUND", nil
+	end
+	if not validSessionMetadata(session) or session.player ~= player or session.userId ~= player.UserId then
+		return false, "INVALID_DATA", nil
+	end
+	if session.state == "Saving" or session.saveInFlight or session.finalizeRequested then
+		return false, "BUSY", nil
+	end
+	if session.state ~= "Loaded" then
+		return false, "NOT_LOADED", nil
+	end
+
+	local data = session.data
+	if type(data) ~= "table" or type(data.UpgradeLevels) ~= "table" then
+		return false, "INVALID_DATA", nil
+	end
+	if type(Config.Security) ~= "table" then
+		return false, "INVALID_DATA", nil
+	end
+	local maxEnergy = configuredCap(Config.Security.MaxEnergy)
+	local currentEnergy = data.Energy
+	local currentLevel = data.UpgradeLevels[upgradeId]
+	if maxEnergy == nil
+		or not isFiniteInteger(currentEnergy)
+		or currentEnergy < 0
+		or currentEnergy > maxEnergy
+		or not isFiniteInteger(currentLevel)
+		or currentLevel < 0
+	then
+		return false, "INVALID_DATA", nil
+	end
+
+	local effectiveLimit = exactUpgradeLimit(upgradeId)
+	if effectiveLimit == nil then
+		return false, "INVALID_DATA", nil
+	end
+	if currentLevel >= effectiveLimit then
+		return false, "MAX_LEVEL", nil
+	end
+	if not UpgradeDefinitions.canLevelUp(upgradeId, currentLevel) then
+		return false, "INVALID_DATA", nil
+	end
+
+	local costCallSucceeded, cost = pcall(Config.getUpgradeCost, upgradeId, currentLevel)
+	if not costCallSucceeded or not isFiniteInteger(cost) or cost < 1 or cost > maxEnergy then
+		return false, "INVALID_COST", nil
+	end
+	if currentEnergy < cost then
+		return false, "INSUFFICIENT_ENERGY", nil
+	end
+
+	local newEnergy = currentEnergy - cost
+	local newLevel = currentLevel + 1
+	if not isFiniteInteger(newEnergy) or newEnergy < 0 or newLevel > effectiveLimit then
+		return false, "INVALID_DATA", nil
+	end
+
+	data.Energy = newEnergy
+	data.UpgradeLevels[upgradeId] = newLevel
+	local dirtySucceeded = configured.dataService.markDirty(player)
+	if not dirtySucceeded then
+		data.Energy = currentEnergy
+		data.UpgradeLevels[upgradeId] = currentLevel
+		return false, "DIRTY_FAILED", nil
+	end
+
+	local syncSucceeded = configured.dataService.syncToClient(player)
+	return true, "OK", table.freeze({
+		upgradeId = upgradeId,
+		cost = cost,
+		newLevel = newLevel,
 		syncSucceeded = syncSucceeded,
 	})
 end
