@@ -22,11 +22,11 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 -- Require shared modules
-local Config = require(ReplicatedStorage.Shared.Config)
-local NumberFormatter = require(ReplicatedStorage.Shared.NumberFormatter)
-local UpgradeDefinitions = require(ReplicatedStorage.Shared.UpgradeDefinitions)
-local FactoryDefinitions = require(ReplicatedStorage.Shared.FactoryDefinitions)
-local QuestDefinitions = require(ReplicatedStorage.Shared.QuestDefinitions)
+local Config = require(ReplicatedStorage.LCA_Shared.Config)
+local NumberFormatter = require(ReplicatedStorage.LCA_Shared.NumberFormatter)
+local UpgradeDefinitions = require(ReplicatedStorage.LCA_Shared.UpgradeDefinitions)
+local FactoryDefinitions = require(ReplicatedStorage.LCA_Shared.FactoryDefinitions)
+local QuestDefinitions = require(ReplicatedStorage.LCA_Shared.QuestDefinitions)
 
 -- ============================================================
 -- Remotes
