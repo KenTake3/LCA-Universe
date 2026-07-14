@@ -10,3 +10,4 @@
 - Recovered immutable six-stage factory definitions with safe input normalization, confirmed unlock thresholds, and provisional descriptions, colors, and progress behavior.
 - Recovered the minimal immutable quest-definition contract with the confirmed `Press` achievement category and no invented gameplay records.
 - Added a non-integrated WP-06B1 ServerDataService skeleton with revision-safe dirty tracking; production persistence and lifecycle wiring remain disabled.
+- Added the WP-06B2 canonical in-memory SessionRepository with isolated defaults, fail-closed migration, and detached recovered sync packets; persistence and lifecycle integration remain deferred.
