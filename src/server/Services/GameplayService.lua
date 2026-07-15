@@ -20,28 +20,28 @@ export type ResultCode =
 	| "DIRTY_FAILED"
 
 export type PressResult = {
-	reward: number,
-	syncSucceeded: boolean,
+	read reward: number,
+	read syncSucceeded: boolean,
 }
 
 export type UpgradePurchaseResult = {
-	upgradeId: string,
-	cost: number,
-	newLevel: number,
-	syncSucceeded: boolean,
+	read upgradeId: string,
+	read cost: number,
+	read newLevel: number,
+	read syncSucceeded: boolean,
 }
 
 export type AutoPowerResult = {
-	reward: number,
-	energyAdded: number,
-	lifetimeEnergyAdded: number,
-	syncSucceeded: boolean,
+	read reward: number,
+	read energyAdded: number,
+	read lifetimeEnergyAdded: number,
+	read syncSucceeded: boolean,
 }
 
 export type RebirthResult = {
-	cost: number,
-	newRebirths: number,
-	syncSucceeded: boolean,
+	read cost: number,
+	read newRebirths: number,
+	read syncSucceeded: boolean,
 }
 
 export type SessionRepository = {
@@ -174,7 +174,10 @@ local function exactUpgradeLimit(upgradeId: string): number?
 			definitionLimit = configuredNonNegativeCap(upgrade.maxLevel)
 		end
 	end
-	if matches ~= 1 or definitionLimit == nil then
+	if matches ~= 1 then
+		return nil
+	end
+	if definitionLimit == nil then
 		return nil
 	end
 	return math.min(securityLimit, definitionLimit)
@@ -253,9 +256,16 @@ function GameplayService.press(player: Player): (boolean, ResultCode, PressResul
 	local maxEnergy = configuredCap(Config.Security.MaxEnergy)
 	local maxReward = configuredCap(Config.Security.MaxRewardPerPress)
 	local maxRebirths = configuredNonNegativeCap(Config.Security.MaxRebirths)
-	if maxEnergy == nil or maxReward == nil
-		or maxRebirths == nil
-		or data.Rebirths > maxRebirths
+	if maxEnergy == nil then
+		return false, "INVALID_DATA", nil
+	end
+	if maxReward == nil then
+		return false, "INVALID_DATA", nil
+	end
+	if maxRebirths == nil then
+		return false, "INVALID_DATA", nil
+	end
+	if data.Rebirths > maxRebirths
 		or data.Energy > maxEnergy
 		or data.LifetimeEnergy > maxEnergy
 		or data.TotalPresses > MAX_SAFE_INTEGER
@@ -376,10 +386,16 @@ function GameplayService.applyAutoPowerTick(
 	local maxEnergy = configuredCap(Config.Security.MaxEnergy)
 	local maxRebirths = configuredNonNegativeCap(Config.Security.MaxRebirths)
 	local autoPowerLimit = upgradeLimit("AutoPower")
-	if maxEnergy == nil
-		or maxRebirths == nil
-		or autoPowerLimit == nil
-		or data.Energy > maxEnergy
+	if maxEnergy == nil then
+		return false, "INVALID_DATA", nil
+	end
+	if maxRebirths == nil then
+		return false, "INVALID_DATA", nil
+	end
+	if autoPowerLimit == nil then
+		return false, "INVALID_DATA", nil
+	end
+	if data.Energy > maxEnergy
 		or data.LifetimeEnergy > maxEnergy
 		or data.Rebirths > maxRebirths
 		or data.UpgradeLevels.AutoPower > autoPowerLimit
@@ -510,9 +526,13 @@ function GameplayService.rebirth(player: Player): (boolean, ResultCode, RebirthR
 
 	local maxEnergy = configuredCap(Config.Security.MaxEnergy)
 	local maxRebirths = configuredNonNegativeCap(Config.Security.MaxRebirths)
-	if maxEnergy == nil
-		or maxRebirths == nil
-		or data.Energy > maxEnergy
+	if maxEnergy == nil then
+		return false, "INVALID_DATA", nil
+	end
+	if maxRebirths == nil then
+		return false, "INVALID_DATA", nil
+	end
+	if data.Energy > maxEnergy
 		or data.LifetimeEnergy > maxEnergy
 		or data.Rebirths > maxRebirths
 	then
@@ -532,7 +552,10 @@ function GameplayService.rebirth(player: Player): (boolean, ResultCode, RebirthR
 	local costCallSucceeded, cost = pcall(function(): number
 		return Config.getRebirthCost(data.Rebirths)
 	end)
-	if not costCallSucceeded or not isFiniteInteger(cost) or cost < 1 or cost > maxEnergy then
+	if not costCallSucceeded then
+		return false, "INVALID_COST", nil
+	end
+	if not isFiniteInteger(cost) or cost < 1 or cost > maxEnergy then
 		return false, "INVALID_COST", nil
 	end
 	if data.Energy < cost then
@@ -631,8 +654,10 @@ function GameplayService.buyUpgrade(
 	local maxEnergy = configuredCap(Config.Security.MaxEnergy)
 	local currentEnergy = data.Energy
 	local currentLevel = data.UpgradeLevels[upgradeId]
-	if maxEnergy == nil
-		or not isFiniteInteger(currentEnergy)
+	if maxEnergy == nil then
+		return false, "INVALID_DATA", nil
+	end
+	if not isFiniteInteger(currentEnergy)
 		or currentEnergy < 0
 		or currentEnergy > maxEnergy
 		or not isFiniteInteger(currentLevel)
@@ -652,8 +677,13 @@ function GameplayService.buyUpgrade(
 		return false, "INVALID_DATA", nil
 	end
 
-	local costCallSucceeded, cost = pcall(Config.getUpgradeCost, upgradeId, currentLevel)
-	if not costCallSucceeded or not isFiniteInteger(cost) or cost < 1 or cost > maxEnergy then
+	local costCallSucceeded, cost = pcall(function(): number
+		return Config.getUpgradeCost(upgradeId, currentLevel)
+	end)
+	if not costCallSucceeded then
+		return false, "INVALID_COST", nil
+	end
+	if not isFiniteInteger(cost) or cost < 1 or cost > maxEnergy then
 		return false, "INVALID_COST", nil
 	end
 	if currentEnergy < cost then

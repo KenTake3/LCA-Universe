@@ -1,14 +1,18 @@
 --!strict
 
 export type StageDefinition = {
-	id: string,
-	stage: number,
-	name: string,
-	description: string,
-	coreColor: Color3,
-	lifetimeEnergyRequired: number,
-	rebirthsRequired: number,
-	unlockMode: string,
+	read id: string,
+	read stage: number,
+	read name: string,
+	read description: string,
+	read coreColor: Color3,
+	read lifetimeEnergyRequired: number,
+	read rebirthsRequired: number,
+	read unlockMode: string,
+}
+
+export type StageList = {
+	read [number]: StageDefinition,
 }
 
 local FactoryDefinitions = {}
@@ -170,7 +174,8 @@ local function clampedRatio(value: number, requirement: number): number
 end
 
 validateDefinitions()
-FactoryDefinitions.Stages = table.freeze(stages)
+local publishedStages: StageList = table.freeze(stages)
+FactoryDefinitions.Stages = publishedStages
 
 function FactoryDefinitions.getStage(stageValue: any): StageDefinition
 	return FactoryDefinitions.Stages[normalizeStage(stageValue)]
