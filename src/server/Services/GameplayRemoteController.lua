@@ -5,12 +5,14 @@ local Config = require(game.ReplicatedStorage.LCA_Shared.Config)
 export type GameplayService = {
 	press: (player: Player) -> (boolean, string, { reward: number, syncSucceeded: boolean }?),
 	buyUpgrade: (player: Player, upgradeId: string) -> (boolean, string, any?),
+	rebirth: (player: Player) -> (boolean, string, any?),
 }
 
 export type Dependencies = {
 	pressCore: RemoteEvent,
 	pressFeedback: RemoteEvent,
 	buyUpgrade: RemoteEvent,
+	requestRebirth: RemoteEvent,
 	gameplayService: GameplayService,
 }
 
@@ -18,6 +20,7 @@ local GameplayRemoteController = {}
 local dependencies: Dependencies? = nil
 local pressTimestamps: { [Player]: { number } } = setmetatable({}, { __mode = "k" }) :: any
 local upgradeTimestamps: { [Player]: { number } } = setmetatable({}, { __mode = "k" }) :: any
+local rebirthTimestamps: { [Player]: number } = setmetatable({}, { __mode = "k" }) :: any
 local SUPPORTED_UPGRADES = {
 	ClickPower = true,
 	AutoPower = true,
@@ -57,7 +60,13 @@ local function validateDependencies(candidate: any): Dependencies
 		error("GameplayRemoteController.init requires a dependency table", 3)
 	end
 
-	local expectedKeys = { pressCore = true, pressFeedback = true, buyUpgrade = true, gameplayService = true }
+	local expectedKeys = {
+		pressCore = true,
+		pressFeedback = true,
+		buyUpgrade = true,
+		requestRebirth = true,
+		gameplayService = true,
+	}
 	for key in pairs(candidate) do
 		if not expectedKeys[key] then
 			error("GameplayRemoteController.init received an unexpected dependency", 3)
@@ -67,6 +76,7 @@ local function validateDependencies(candidate: any): Dependencies
 	local pressCore = candidate.pressCore
 	local pressFeedback = candidate.pressFeedback
 	local buyUpgrade = candidate.buyUpgrade
+	local requestRebirth = candidate.requestRebirth
 	local gameplayService = candidate.gameplayService
 	if typeof(pressCore) ~= "Instance"
 		or not pressCore:IsA("RemoteEvent")
@@ -74,9 +84,12 @@ local function validateDependencies(candidate: any): Dependencies
 		or not pressFeedback:IsA("RemoteEvent")
 		or typeof(buyUpgrade) ~= "Instance"
 		or not buyUpgrade:IsA("RemoteEvent")
+		or typeof(requestRebirth) ~= "Instance"
+		or not requestRebirth:IsA("RemoteEvent")
 		or type(gameplayService) ~= "table"
 		or type(gameplayService.press) ~= "function"
 		or type(gameplayService.buyUpgrade) ~= "function"
+		or type(gameplayService.rebirth) ~= "function"
 	then
 		error("GameplayRemoteController.init received malformed dependencies", 3)
 	end
@@ -87,8 +100,19 @@ local function validateDependencies(candidate: any): Dependencies
 		pressCore = pressCore,
 		pressFeedback = pressFeedback,
 		buyUpgrade = buyUpgrade,
+		requestRebirth = requestRebirth,
 		gameplayService = gameplayService,
 	}) :: Dependencies
+end
+
+local function acceptRebirth(player: Player): boolean
+	local now = os.clock()
+	local previous = rebirthTimestamps[player]
+	if previous ~= nil and now - previous < 1 then
+		return false
+	end
+	rebirthTimestamps[player] = now
+	return true
 end
 
 local function acceptUpgrade(player: Player): boolean
@@ -164,12 +188,24 @@ local function onPress(player: Player, ...: any)
 	})
 end
 
+local function onRequestRebirth(player: Player, ...: any)
+	if select("#", ...) ~= 0 or not acceptRebirth(player) then
+		return
+	end
+
+	local configured = dependencies :: Dependencies
+	pcall(function()
+		configured.gameplayService.rebirth(player)
+	end)
+end
+
 function GameplayRemoteController.init(candidate: Dependencies)
 	local validated = validateDependencies(candidate)
 	if dependencies ~= nil then
 		if dependencies.pressCore == validated.pressCore
 			and dependencies.pressFeedback == validated.pressFeedback
 			and dependencies.buyUpgrade == validated.buyUpgrade
+			and dependencies.requestRebirth == validated.requestRebirth
 			and dependencies.gameplayService == validated.gameplayService
 		then
 			return
@@ -180,6 +216,7 @@ function GameplayRemoteController.init(candidate: Dependencies)
 	dependencies = validated
 	validated.pressCore.OnServerEvent:Connect(onPress)
 	validated.buyUpgrade.OnServerEvent:Connect(onBuyUpgrade)
+	validated.requestRebirth.OnServerEvent:Connect(onRequestRebirth)
 end
 
 return table.freeze(GameplayRemoteController)

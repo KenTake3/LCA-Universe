@@ -1289,7 +1289,6 @@ end
 -- Rebirth confirm
 rebirthConfirmBtn.MouseButton1Click:Connect(function()
 	requestRebirthEvent:FireServer()
-	showNotification("Rebirth successful!", COLORS.purple)
 end)
 
 -- Daily claim

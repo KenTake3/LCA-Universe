@@ -18,4 +18,5 @@
 - Validated the recovered UPG interface and authoritative upgrade purchase flow in Studio; the empty monetization-only SHOP requires no client repair while game passes remain disabled.
 - Added and Studio-validated server-authoritative one-second Auto Power production with bounded Heartbeat catch-up, atomic factory progression, revision-aware rollback, and responsive DataSync UI updates.
 - Moved and Studio-validated the recovered MainGuiClient under authoritative Rojo ownership at `StarterGui/MainGui/MainGuiClient`, preserving its confirmed ScreenGui properties and eliminating duplicate/manual source ownership.
+- Added and Studio-validated the WP-11 authoritative Rebirth transaction with server-derived eligibility, complete upgrade reset, atomic Factory progression, rollback, independent rate limiting, and DataSync.
 - Updated the recovered MainGuiClient's five shared-module requires to the current `ReplicatedStorage.LCA_Shared` Rojo path; the deployed Studio copy still requires the same manual update.
