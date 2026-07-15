@@ -15,4 +15,5 @@
 - Added the WP-07A authoritative press-only gameplay slice with Loaded-session enforcement, revision-aware mutation, server rate limiting, and explicit COMMON feedback.
 - Added the WP-07B authoritative single-upgrade purchase flow with server-derived costs, fail-closed level validation, atomic rollback, independent rate limiting, and DataSync feedback.
 - Added WP-08 press-triggered canonical Factory progression; visual and global factory evolution remain deferred.
+- Validated the recovered UPG interface and authoritative upgrade purchase flow in Studio; the empty monetization-only SHOP requires no client repair while game passes remain disabled.
 - Updated the recovered MainGuiClient's five shared-module requires to the current `ReplicatedStorage.LCA_Shared` Rojo path; the deployed Studio copy still requires the same manual update.
