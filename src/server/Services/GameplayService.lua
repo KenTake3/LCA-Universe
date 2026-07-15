@@ -30,6 +30,13 @@ export type UpgradePurchaseResult = {
 	syncSucceeded: boolean,
 }
 
+export type AutoPowerResult = {
+	reward: number,
+	energyAdded: number,
+	lifetimeEnergyAdded: number,
+	syncSucceeded: boolean,
+}
+
 export type SessionRepository = {
 	getSession: (player: Player) -> any,
 }
@@ -305,6 +312,145 @@ function GameplayService.press(player: Player): (boolean, ResultCode, PressResul
 	local syncSucceeded = configured.dataService.syncToClient(player)
 	return true, "OK", table.freeze({
 		reward = reward,
+		syncSucceeded = syncSucceeded,
+	})
+end
+
+function GameplayService.applyAutoPowerTick(
+	player: Player
+): (boolean, ResultCode, AutoPowerResult?)
+	if not isPlayer(player) then
+		return false, "INVALID_PLAYER", nil
+	end
+	local configured = dependencies
+	if configured == nil then
+		return false, "NOT_FOUND", nil
+	end
+
+	local session = configured.sessions.getSession(player)
+	if session == nil then
+		return false, "NOT_FOUND", nil
+	end
+	if not validSessionMetadata(session) or session.player ~= player or session.userId ~= player.UserId then
+		return false, "INVALID_DATA", nil
+	end
+	if session.state == "Saving" or session.saveInFlight or session.finalizeRequested then
+		return false, "BUSY", nil
+	end
+	if session.state ~= "Loaded" then
+		return false, "NOT_LOADED", nil
+	end
+
+	local data = session.data
+	if type(data) ~= "table"
+		or type(data.UpgradeLevels) ~= "table"
+		or not isFiniteInteger(data.Energy)
+		or data.Energy < 0
+		or not isFiniteInteger(data.LifetimeEnergy)
+		or data.LifetimeEnergy < 0
+		or not isFiniteInteger(data.Rebirths)
+		or data.Rebirths < 0
+		or not isFiniteInteger(data.UpgradeLevels.AutoPower)
+		or data.UpgradeLevels.AutoPower < 0
+		or not isFiniteInteger(data.FactoryStage)
+		or data.FactoryStage < 1
+		or data.FactoryStage > #FactoryDefinitions.Stages
+		or not isFiniteInteger(data.HighestFactoryStage)
+		or data.HighestFactoryStage < 1
+		or data.HighestFactoryStage > #FactoryDefinitions.Stages
+		or data.HighestFactoryStage < data.FactoryStage
+	then
+		return false, "INVALID_DATA", nil
+	end
+	if type(Config.Security) ~= "table" then
+		return false, "INVALID_DATA", nil
+	end
+
+	local maxEnergy = configuredCap(Config.Security.MaxEnergy)
+	local maxRebirths = configuredNonNegativeCap(Config.Security.MaxRebirths)
+	local autoPowerLimit = upgradeLimit("AutoPower")
+	if maxEnergy == nil
+		or maxRebirths == nil
+		or autoPowerLimit == nil
+		or data.Energy > maxEnergy
+		or data.LifetimeEnergy > maxEnergy
+		or data.Rebirths > maxRebirths
+		or data.UpgradeLevels.AutoPower > autoPowerLimit
+	then
+		return false, "INVALID_DATA", nil
+	end
+
+	local stats = UpgradeDefinitions.calculateStats(data.UpgradeLevels, data.Rebirths)
+	local derivedAutoPower = stats.AutoPower
+	if not isFiniteNumber(derivedAutoPower) or derivedAutoPower < 0 then
+		return false, "INVALID_REWARD", nil
+	end
+	local reward = math.floor(derivedAutoPower)
+	if not isFiniteInteger(reward) or reward < 0 or reward > maxEnergy then
+		return false, "INVALID_REWARD", nil
+	end
+	if reward <= 0 then
+		return true, "OK", table.freeze({
+			reward = 0,
+			energyAdded = 0,
+			lifetimeEnergyAdded = 0,
+			syncSucceeded = false,
+		})
+	end
+
+	local oldEnergy = data.Energy
+	local oldLifetimeEnergy = data.LifetimeEnergy
+	local oldFactoryStage = data.FactoryStage
+	local oldHighestFactoryStage = data.HighestFactoryStage
+	local newEnergy = saturatingAdd(oldEnergy, reward, maxEnergy)
+	local newLifetimeEnergy = saturatingAdd(oldLifetimeEnergy, reward, maxEnergy)
+	local newFactoryStage = oldFactoryStage
+	local newHighestFactoryStage = oldHighestFactoryStage
+	local eligibleStage = FactoryDefinitions.calculateStage(newLifetimeEnergy, data.Rebirths)
+	if not isFiniteInteger(eligibleStage)
+		or eligibleStage < 1
+		or eligibleStage > #FactoryDefinitions.Stages
+	then
+		return false, "INVALID_DATA", nil
+	end
+	if eligibleStage > oldHighestFactoryStage then
+		newFactoryStage = eligibleStage
+		newHighestFactoryStage = eligibleStage
+	end
+
+	local energyAdded = newEnergy - oldEnergy
+	local lifetimeEnergyAdded = newLifetimeEnergy - oldLifetimeEnergy
+	if energyAdded == 0
+		and lifetimeEnergyAdded == 0
+		and newFactoryStage == oldFactoryStage
+		and newHighestFactoryStage == oldHighestFactoryStage
+	then
+		return true, "OK", table.freeze({
+			reward = reward,
+			energyAdded = 0,
+			lifetimeEnergyAdded = 0,
+			syncSucceeded = false,
+		})
+	end
+
+	data.Energy = newEnergy
+	data.LifetimeEnergy = newLifetimeEnergy
+	data.FactoryStage = newFactoryStage
+	data.HighestFactoryStage = newHighestFactoryStage
+	local dirtySucceeded = configured.dataService.markDirty(player)
+	if not dirtySucceeded then
+		data.Energy = oldEnergy
+		data.LifetimeEnergy = oldLifetimeEnergy
+		data.FactoryStage = oldFactoryStage
+		data.HighestFactoryStage = oldHighestFactoryStage
+		return false, "DIRTY_FAILED", nil
+	end
+
+	local syncSucceeded = configured.dataService.syncToClient(player)
+	return true, "OK", table.freeze({
+		reward = reward,
+		energyAdded = energyAdded,
+		lifetimeEnergyAdded = lifetimeEnergyAdded,
 		syncSucceeded = syncSucceeded,
 	})
 end

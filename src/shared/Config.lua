@@ -145,7 +145,7 @@ local function finiteNonNegative(value, fallback, maximum)
 	return safeValue
 end
 
-local function finitePower(base, exponent, maximum)
+local function finitePower(base: number, exponent: number, maximum: number): number
 	local result = base ^ exponent
 	if result ~= result or result == math.huge or result == -math.huge then
 		return maximum

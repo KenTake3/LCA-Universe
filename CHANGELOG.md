@@ -16,4 +16,6 @@
 - Added the WP-07B authoritative single-upgrade purchase flow with server-derived costs, fail-closed level validation, atomic rollback, independent rate limiting, and DataSync feedback.
 - Added WP-08 press-triggered canonical Factory progression; visual and global factory evolution remain deferred.
 - Validated the recovered UPG interface and authoritative upgrade purchase flow in Studio; the empty monetization-only SHOP requires no client repair while game passes remain disabled.
+- Added and Studio-validated server-authoritative one-second Auto Power production with bounded Heartbeat catch-up, atomic factory progression, revision-aware rollback, and responsive DataSync UI updates.
+- Moved and Studio-validated the recovered MainGuiClient under authoritative Rojo ownership at `StarterGui/MainGui/MainGuiClient`, preserving its confirmed ScreenGui properties and eliminating duplicate/manual source ownership.
 - Updated the recovered MainGuiClient's five shared-module requires to the current `ReplicatedStorage.LCA_Shared` Rojo path; the deployed Studio copy still requires the same manual update.

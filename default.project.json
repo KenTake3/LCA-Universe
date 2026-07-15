@@ -21,16 +21,22 @@
       }
     },
 
-    "StarterPlayer": {
-      "$className": "StarterPlayer",
+    "StarterGui": {
+      "$className": "StarterGui",
       "$ignoreUnknownInstances": true,
 
-      "StarterPlayerScripts": {
-        "$className": "StarterPlayerScripts",
-        "$ignoreUnknownInstances": true,
+      "MainGui": {
+        "$className": "ScreenGui",
+        "$properties": {
+          "ResetOnSpawn": false,
+          "IgnoreGuiInset": true,
+          "DisplayOrder": 0,
+          "ZIndexBehavior": "Sibling",
+          "Enabled": true
+        },
 
-        "LCA_Client": {
-          "$path": "src/client"
+        "MainGuiClient": {
+          "$path": "src/client/MainGuiClient.client.lua"
         }
       }
     }

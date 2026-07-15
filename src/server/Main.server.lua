@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local services = script.Parent:WaitForChild("Services")
 local ServerDataService = require(services:WaitForChild("ServerDataService"))
@@ -10,6 +11,7 @@ local MemoryPersistenceAdapter = require(services:WaitForChild("MemoryPersistenc
 local DataLifecycleService = require(services:WaitForChild("DataLifecycleService"))
 local GameplayService = require(services:WaitForChild("GameplayService"))
 local GameplayRemoteController = require(services:WaitForChild("GameplayRemoteController"))
+local AutoPowerScheduler = require(services:WaitForChild("AutoPowerScheduler"))
 
 local remotes = ReplicatedStorage:FindFirstChild("Remotes")
 assert(remotes ~= nil, "[LCA] ReplicatedStorage.Remotes is required")
@@ -33,26 +35,64 @@ local function sendQuestSync(player: Player, packet: any)
 	questSync:FireClient(player, packet)
 end
 
+local serverDataSessions: ServerDataService.SessionRepository = {
+	createSession = SessionRepository.createSession,
+	getSession = SessionRepository.getSession,
+	removeSession = SessionRepository.removeSession,
+	getDefaultData = SessionRepository.getDefaultData,
+	migrateData = SessionRepository.migrateData,
+	buildSyncPacket = SessionRepository.buildSyncPacket,
+	buildQuestSyncPacket = SessionRepository.buildQuestSyncPacket,
+}
+local persistenceAdapter: ServerDataService.PersistenceAdapter = {
+	read = MemoryPersistenceAdapter.read,
+	write = MemoryPersistenceAdapter.write,
+}
+local gameplaySessions: GameplayService.SessionRepository = {
+	getSession = SessionRepository.getSession,
+}
+local gameplayDataService: GameplayService.DataService = {
+	markDirty = ServerDataService.markDirty,
+	syncToClient = ServerDataService.syncToClient,
+}
+local remoteGameplayService: GameplayRemoteController.GameplayService = {
+	press = GameplayService.press,
+	buyUpgrade = GameplayService.buyUpgrade,
+}
+local autoPowerGameplayService: AutoPowerScheduler.GameplayService = {
+	applyAutoPowerTick = GameplayService.applyAutoPowerTick,
+}
+local lifecycleDataService: DataLifecycleService.DataService = {
+	loadPlayer = ServerDataService.loadPlayer,
+	finalizePlayer = ServerDataService.finalizePlayer,
+}
+
 ServerDataService.init({
-	sessions = SessionRepository,
-	persistence = MemoryPersistenceAdapter,
+	sessions = serverDataSessions,
+	persistence = persistenceAdapter,
 	sendDataSync = sendDataSync,
 	sendQuestSync = sendQuestSync,
 })
 
 GameplayService.init({
-	sessions = SessionRepository,
-	dataService = ServerDataService,
+	sessions = gameplaySessions,
+	dataService = gameplayDataService,
 })
 
 GameplayRemoteController.init({
 	pressCore = pressCore,
 	pressFeedback = pressFeedback,
 	buyUpgrade = buyUpgrade,
-	gameplayService = GameplayService,
+	gameplayService = remoteGameplayService,
+})
+
+AutoPowerScheduler.init({
+	players = Players,
+	runService = RunService,
+	gameplayService = autoPowerGameplayService,
 })
 
 DataLifecycleService.init({
 	players = Players,
-	dataService = ServerDataService,
+	dataService = lifecycleDataService,
 })

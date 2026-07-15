@@ -770,7 +770,6 @@ for _, cat in ipairs(QuestDefinitions.AchievementCategories) do
 
 	tabBtn.MouseButton1Click:Connect(function()
 		selectedAchCategory = cat.id
-		updateAchievementPanel()
 	end)
 
 	achCategoryButtons[cat.id] = tabBtn
@@ -848,7 +847,6 @@ for _, cat in ipairs(collCategories) do
 
 	tabBtn.MouseButton1Click:Connect(function()
 		selectedCollCategory = cat.id
-		updateCollectionPanel()
 	end)
 
 	collCategoryButtons[cat.id] = tabBtn
