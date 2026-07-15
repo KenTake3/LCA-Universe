@@ -2,6 +2,7 @@
 
 local Config = require(game.ReplicatedStorage.LCA_Shared.Config)
 local UpgradeDefinitions = require(game.ReplicatedStorage.LCA_Shared.UpgradeDefinitions)
+local FactoryDefinitions = require(game.ReplicatedStorage.LCA_Shared.FactoryDefinitions)
 
 export type ResultCode =
 	"OK"
@@ -224,6 +225,13 @@ function GameplayService.press(player: Player): (boolean, ResultCode, PressResul
 		or data.LifetimeEnergy < 0
 		or not isFiniteInteger(data.TotalPresses)
 		or data.TotalPresses < 0
+		or not isFiniteInteger(data.FactoryStage)
+		or data.FactoryStage < 1
+		or data.FactoryStage > #FactoryDefinitions.Stages
+		or not isFiniteInteger(data.HighestFactoryStage)
+		or data.HighestFactoryStage < 1
+		or data.HighestFactoryStage > #FactoryDefinitions.Stages
+		or data.HighestFactoryStage < data.FactoryStage
 	then
 		return false, "INVALID_DATA", nil
 	end
@@ -263,15 +271,34 @@ function GameplayService.press(player: Player): (boolean, ResultCode, PressResul
 	local oldEnergy = data.Energy
 	local oldLifetimeEnergy = data.LifetimeEnergy
 	local oldTotalPresses = data.TotalPresses
-	data.Energy = saturatingAdd(oldEnergy, reward, maxEnergy)
-	data.LifetimeEnergy = saturatingAdd(oldLifetimeEnergy, reward, maxEnergy)
-	data.TotalPresses = saturatingAdd(oldTotalPresses, 1, MAX_SAFE_INTEGER)
+	local oldFactoryStage = data.FactoryStage
+	local oldHighestFactoryStage = data.HighestFactoryStage
+	local newEnergy = saturatingAdd(oldEnergy, reward, maxEnergy)
+	local newLifetimeEnergy = saturatingAdd(oldLifetimeEnergy, reward, maxEnergy)
+	local newTotalPresses = saturatingAdd(oldTotalPresses, 1, MAX_SAFE_INTEGER)
+	local eligibleStage = FactoryDefinitions.calculateStage(newLifetimeEnergy, data.Rebirths)
+	if not isFiniteInteger(eligibleStage)
+		or eligibleStage < 1
+		or eligibleStage > #FactoryDefinitions.Stages
+	then
+		return false, "INVALID_DATA", nil
+	end
+
+	data.Energy = newEnergy
+	data.LifetimeEnergy = newLifetimeEnergy
+	data.TotalPresses = newTotalPresses
+	if eligibleStage > oldHighestFactoryStage then
+		data.FactoryStage = eligibleStage
+		data.HighestFactoryStage = eligibleStage
+	end
 
 	local dirtySucceeded = configured.dataService.markDirty(player)
 	if not dirtySucceeded then
 		data.Energy = oldEnergy
 		data.LifetimeEnergy = oldLifetimeEnergy
 		data.TotalPresses = oldTotalPresses
+		data.FactoryStage = oldFactoryStage
+		data.HighestFactoryStage = oldHighestFactoryStage
 		return false, "DIRTY_FAILED", nil
 	end
 
