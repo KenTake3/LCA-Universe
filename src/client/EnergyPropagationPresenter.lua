@@ -8,6 +8,7 @@ export type Dependencies = {
 	read tweenService: TweenService,
 	read corePart: BasePart?,
 	read worldTarget: BasePart?,
+	read stage2Route: { BasePart }?,
 	read getReducedMotion: () -> boolean,
 	read subscribeReducedMotion: (listener: (reducedMotion: boolean) -> ()) -> PreferenceConnection,
 }
@@ -31,6 +32,14 @@ local TARGET_OUT_SECONDS = 0.28
 local BEAM_FADE_DELAY = 0.3
 local BEAM_FADE_SECONDS = 0.22
 local WORLD_CLEANUP_SECONDS = 0.7
+local STAGE2 = 2
+local ROUTE_START_SECONDS = 0.25
+local ROUTE_ARRIVAL_SECONDS = table.freeze({ 0.28, 0.48, 0.68, 0.88 })
+local ROUTE_NEXT_SECONDS = table.freeze({ 0.3, 0.5, 0.7 })
+local ROUTE_LIGHT_PEAK = 1.15
+local DESTINATION_LIGHT_PEAK = 2.4
+local DESTINATION_HOLD_SECONDS = 0.42
+local MAJOR_WORLD_CLEANUP_SECONDS = 2.1
 
 local dependencies: Dependencies? = nil
 local light: PointLight? = nil
@@ -50,6 +59,13 @@ local transferBeam: Beam? = nil
 local targetLight: PointLight? = nil
 local beamTween: Tween? = nil
 local targetTween: Tween? = nil
+
+local routeAvailable = false
+local routeStage: Instance? = nil
+local routeFactoryRoot: Instance? = nil
+local routeTargets: { BasePart } = {}
+local routeAttachments: { Attachment } = {}
+local routeLight: PointLight? = nil
 
 local function liftColor(color: Color3): Color3
 	return color:Lerp(Color3.new(1, 1, 1), COLOR_LIFT)
@@ -89,30 +105,53 @@ local function neutralizeWorld()
 	if targetLight ~= nil then
 		targetLight.Brightness = 0
 	end
+	if routeLight ~= nil then
+		routeLight.Brightness = 0
+	end
 end
 
-local function destroyWorldInstances()
+local function destroyRouteInstances()
 	neutralizeWorld()
-	if transferBeam ~= nil then
-		transferBeam:Destroy()
+	if routeLight ~= nil then
+		routeLight:Destroy()
 	end
+	for _, attachment in routeAttachments do
+		attachment:Destroy()
+	end
+	routeLight = nil
+	routeAttachments = {}
+	routeTargets = {}
+	routeStage = nil
+	routeFactoryRoot = nil
+	routeAvailable = false
+end
+
+local function destroyManualWorldInstances()
+	neutralizeWorld()
 	if targetLight ~= nil then
 		targetLight:Destroy()
 	end
 	if targetAttachment ~= nil then
 		targetAttachment:Destroy()
 	end
-	if coreAttachment ~= nil then
-		coreAttachment:Destroy()
-	end
-	transferBeam = nil
 	targetLight = nil
 	targetAttachment = nil
-	coreAttachment = nil
 	worldTarget = nil
 	approvedStage = nil
 	approvedFactoryRoot = nil
 	worldAvailable = false
+end
+
+local function destroySharedWorldInstances()
+	neutralizeWorld()
+	if transferBeam ~= nil then
+		transferBeam:Destroy()
+	end
+	if coreAttachment ~= nil then
+		coreAttachment:Destroy()
+	end
+	transferBeam = nil
+	coreAttachment = nil
 end
 
 local function worldTargetIsValid(): boolean
@@ -143,7 +182,46 @@ local function validateWorldTarget(): boolean
 		return true
 	end
 	if worldAvailable then
-		destroyWorldInstances()
+		destroyManualWorldInstances()
+	end
+	return false
+end
+
+local function routeIsValid(): boolean
+	local configured = dependencies
+	local stage = routeStage
+	local factoryRoot = routeFactoryRoot
+	if not routeAvailable
+		or configured == nil
+		or configured.corePart == nil
+		or configured.corePart.Parent == nil
+		or stage == nil
+		or factoryRoot == nil
+		or stage.Parent ~= factoryRoot
+		or factoryRoot.Parent ~= workspace
+		or coreAttachment == nil
+		or coreAttachment.Parent ~= configured.corePart
+		or transferBeam == nil
+		or routeLight == nil
+		or #routeTargets ~= 4
+		or #routeAttachments ~= 4
+	then
+		return false
+	end
+	for index = 1, 4 do
+		if routeTargets[index].Parent ~= stage or routeAttachments[index].Parent ~= routeTargets[index] then
+			return false
+		end
+	end
+	return true
+end
+
+local function validateRoute(): boolean
+	if routeIsValid() then
+		return true
+	end
+	if routeAvailable then
+		destroyRouteInstances()
 	end
 	return false
 end
@@ -230,6 +308,8 @@ local function presentWorldResponse(color: Color3): boolean
 	local ownedBeam = transferBeam :: Beam
 	local ownedTargetLight = targetLight :: PointLight
 	local displayColor = liftColor(color)
+	ownedBeam.Attachment0 = coreAttachment
+	ownedBeam.Attachment1 = targetAttachment
 	ownedBeam.Color = ColorSequence.new(displayColor)
 	ownedTargetLight.Color = displayColor
 
@@ -299,10 +379,151 @@ local function presentWorldResponse(color: Color3): boolean
 	return true
 end
 
+local function tweenRouteBrightness(currentWorldGeneration: number, brightness: number, duration: number)
+	local configured = dependencies
+	local ownedRouteLight = routeLight
+	if configured == nil or ownedRouteLight == nil or currentWorldGeneration ~= worldGeneration then
+		return
+	end
+	cancelTween(targetTween)
+	local tween = configured.tweenService:Create(
+		ownedRouteLight,
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Brightness = brightness }
+	)
+	targetTween = tween
+	tween:Play()
+end
+
+local function beginRouteSegment(currentWorldGeneration: number, index: number, displayColor: Color3)
+	if currentWorldGeneration ~= worldGeneration or not validateRoute() then
+		return
+	end
+	local ownedBeam = transferBeam :: Beam
+	local source = if index == 1 then coreAttachment else routeAttachments[index - 1]
+	local destination = routeAttachments[index]
+	if source == nil or destination == nil then
+		return
+	end
+	cancelTween(beamTween)
+	ownedBeam.Attachment0 = source
+	ownedBeam.Attachment1 = destination
+	ownedBeam.Color = ColorSequence.new(displayColor)
+	ownedBeam.Enabled = true
+	ownedBeam.Transparency = NumberSequence.new(0.38)
+	ownedBeam.Width0 = 0
+	ownedBeam.Width1 = 0
+	local segmentStart = if index == 1 then ROUTE_START_SECONDS else ROUTE_NEXT_SECONDS[index - 1]
+	local duration = math.max(ROUTE_ARRIVAL_SECONDS[index] - segmentStart, 0.03)
+	local tween = (dependencies :: Dependencies).tweenService:Create(
+		ownedBeam,
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Width0 = 0.14, Width1 = 0.07 }
+	)
+	beamTween = tween
+	tween:Play()
+end
+
+local function arriveAtRouteTarget(currentWorldGeneration: number, index: number, displayColor: Color3)
+	if currentWorldGeneration ~= worldGeneration or not validateRoute() then
+		return
+	end
+	local ownedRouteLight = routeLight :: PointLight
+	ownedRouteLight.Parent = routeTargets[index]
+	ownedRouteLight.Color = displayColor
+	ownedRouteLight.Brightness = 0
+	if index == 4 then
+		tweenRouteBrightness(currentWorldGeneration, DESTINATION_LIGHT_PEAK, 0.12)
+		task.delay(DESTINATION_HOLD_SECONDS, function()
+			if currentWorldGeneration == worldGeneration then
+				tweenRouteBrightness(currentWorldGeneration, 0, 0.38)
+			end
+		end)
+	else
+		tweenRouteBrightness(currentWorldGeneration, ROUTE_LIGHT_PEAK, 0.06)
+		task.delay(0.1, function()
+			if currentWorldGeneration == worldGeneration then
+				tweenRouteBrightness(currentWorldGeneration, 0, 0.08)
+			end
+		end)
+	end
+end
+
+local function presentStage2Route(color: Color3): boolean
+	local configured = dependencies
+	if configured == nil or not validateRoute() then
+		return false
+	end
+	neutralizeWorld()
+	worldGeneration += 1
+	local currentWorldGeneration = worldGeneration
+	local displayColor = liftColor(color)
+
+	if configured.getReducedMotion() then
+		local ownedRouteLight = routeLight :: PointLight
+		ownedRouteLight.Parent = routeTargets[4]
+		ownedRouteLight.Color = displayColor
+		tweenRouteBrightness(currentWorldGeneration, 0.8, 0.08)
+		task.delay(0.18, function()
+			if currentWorldGeneration == worldGeneration then
+				tweenRouteBrightness(currentWorldGeneration, 0, 0.18)
+			end
+		end)
+		task.delay(0.45, function()
+			if currentWorldGeneration == worldGeneration then
+				neutralizeWorld()
+			end
+		end)
+		return true
+	end
+
+	task.delay(ROUTE_START_SECONDS, function()
+		beginRouteSegment(currentWorldGeneration, 1, displayColor)
+	end)
+	for index, arrivalSeconds in ROUTE_ARRIVAL_SECONDS do
+		task.delay(arrivalSeconds, function()
+			arriveAtRouteTarget(currentWorldGeneration, index, displayColor)
+		end)
+		if index < 4 then
+			task.delay(ROUTE_NEXT_SECONDS[index], function()
+				beginRouteSegment(currentWorldGeneration, index + 1, displayColor)
+			end)
+		end
+	end
+	task.delay(1.3, function()
+		if currentWorldGeneration == worldGeneration and transferBeam ~= nil then
+			cancelTween(beamTween)
+			local tween = configured.tweenService:Create(
+				transferBeam,
+				TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Width0 = 0, Width1 = 0 }
+			)
+			beamTween = tween
+			tween:Play()
+		end
+	end)
+	task.delay(MAJOR_WORLD_CLEANUP_SECONDS, function()
+		if currentWorldGeneration == worldGeneration then
+			neutralizeWorld()
+		end
+	end)
+	return true
+end
+
 function EnergyPropagationPresenter.init(candidate: Dependencies)
+	local malformedRoute = candidate.stage2Route ~= nil and #candidate.stage2Route ~= 4
+	if candidate.stage2Route ~= nil and not malformedRoute then
+		for _, target in candidate.stage2Route do
+			if not target:IsA("BasePart") then
+				malformedRoute = true
+				break
+			end
+		end
+	end
 	if not candidate.tweenService:IsA("TweenService")
 		or (candidate.corePart ~= nil and not candidate.corePart:IsA("BasePart"))
 		or (candidate.worldTarget ~= nil and not candidate.worldTarget:IsA("BasePart"))
+		or malformedRoute
 		or type(candidate.getReducedMotion) ~= "function"
 		or type(candidate.subscribeReducedMotion) ~= "function"
 	then
@@ -312,6 +533,7 @@ function EnergyPropagationPresenter.init(candidate: Dependencies)
 		if dependencies.tweenService == candidate.tweenService
 			and dependencies.corePart == candidate.corePart
 			and dependencies.worldTarget == candidate.worldTarget
+			and dependencies.stage2Route == candidate.stage2Route
 			and dependencies.getReducedMotion == candidate.getReducedMotion
 			and dependencies.subscribeReducedMotion == candidate.subscribeReducedMotion
 		then
@@ -331,25 +553,15 @@ function EnergyPropagationPresenter.init(candidate: Dependencies)
 		light = presentationLight
 	end
 
-	if candidate.corePart ~= nil and candidate.worldTarget ~= nil then
-		worldTarget = candidate.worldTarget
-		approvedStage = candidate.worldTarget.Parent
-		approvedFactoryRoot = if approvedStage ~= nil then approvedStage.Parent else nil
-
+	if candidate.corePart ~= nil and (candidate.worldTarget ~= nil or candidate.stage2Route ~= nil) then
 		local sourceAttachment = Instance.new("Attachment")
 		sourceAttachment.Name = "WP15CoreTransferAttachment"
 		sourceAttachment.Parent = candidate.corePart
 		coreAttachment = sourceAttachment
 
-		local destinationAttachment = Instance.new("Attachment")
-		destinationAttachment.Name = "WP15BaseRingResponseAttachment"
-		destinationAttachment.Parent = candidate.worldTarget
-		targetAttachment = destinationAttachment
-
 		local beam = Instance.new("Beam")
 		beam.Name = "WP15CoreToBaseRingBeam"
 		beam.Attachment0 = sourceAttachment
-		beam.Attachment1 = destinationAttachment
 		beam.Enabled = false
 		beam.FaceCamera = true
 		beam.LightEmission = 0.7
@@ -359,6 +571,18 @@ function EnergyPropagationPresenter.init(candidate: Dependencies)
 		beam.Width1 = 0
 		beam.Parent = sourceAttachment
 		transferBeam = beam
+	end
+
+	if candidate.corePart ~= nil and candidate.worldTarget ~= nil and coreAttachment ~= nil and transferBeam ~= nil then
+		worldTarget = candidate.worldTarget
+		approvedStage = candidate.worldTarget.Parent
+		approvedFactoryRoot = if approvedStage ~= nil then approvedStage.Parent else nil
+
+		local destinationAttachment = Instance.new("Attachment")
+		destinationAttachment.Name = "WP15BaseRingResponseAttachment"
+		destinationAttachment.Parent = candidate.worldTarget
+		targetAttachment = destinationAttachment
+		transferBeam.Attachment1 = destinationAttachment
 
 		local responseLight = Instance.new("PointLight")
 		responseLight.Name = "WP15BaseRingResponseLight"
@@ -370,7 +594,30 @@ function EnergyPropagationPresenter.init(candidate: Dependencies)
 		worldAvailable = true
 		worldAvailable = worldTargetIsValid()
 		if not worldAvailable then
-			destroyWorldInstances()
+			destroyManualWorldInstances()
+		end
+	end
+
+	if candidate.corePart ~= nil and candidate.stage2Route ~= nil and coreAttachment ~= nil and transferBeam ~= nil then
+		routeStage = candidate.stage2Route[1].Parent
+		routeFactoryRoot = if routeStage ~= nil then routeStage.Parent else nil
+		for index, target in candidate.stage2Route do
+			routeTargets[index] = target
+			local attachment = Instance.new("Attachment")
+			attachment.Name = "WP15BStage2Connector" .. (index - 1) .. "Attachment"
+			attachment.Parent = target
+			routeAttachments[index] = attachment
+		end
+		local responseLight = Instance.new("PointLight")
+		responseLight.Name = "WP15BStage2RouteLight"
+		responseLight.Brightness = 0
+		responseLight.Range = 12
+		responseLight.Shadows = false
+		responseLight.Parent = candidate.stage2Route[1]
+		routeLight = responseLight
+		routeAvailable = true
+		if not routeIsValid() then
+			destroyRouteInstances()
 		end
 	end
 
@@ -409,10 +656,15 @@ function EnergyPropagationPresenter.presentManual(payload: unknown): boolean
 	return corePresented or worldPresented
 end
 
-function EnergyPropagationPresenter.playMajor(color: Color3): boolean
+function EnergyPropagationPresenter.playMajor(color: Color3, destinationStage: number): boolean
 	local configured = dependencies
 	local ownedLight = light
-	if configured == nil or ownedLight == nil or typeof(color) ~= "Color3" then
+	if configured == nil
+		or ownedLight == nil
+		or typeof(color) ~= "Color3"
+		or type(destinationStage) ~= "number"
+		or destinationStage ~= math.floor(destinationStage)
+	then
 		return false
 	end
 	neutralizeWorld()
@@ -426,6 +678,9 @@ function EnergyPropagationPresenter.playMajor(color: Color3): boolean
 				majorActive = false
 			end
 		end)
+		if destinationStage == STAGE2 then
+			presentStage2Route(color)
+		end
 		return result
 	end
 
@@ -444,6 +699,9 @@ function EnergyPropagationPresenter.playMajor(color: Color3): boolean
 			end)
 		end)
 	end)
+	if destinationStage == STAGE2 then
+		presentStage2Route(color)
+	end
 	return true
 end
 
@@ -459,7 +717,9 @@ function EnergyPropagationPresenter.destroy()
 		preferenceConnection = nil
 	end
 	EnergyPropagationPresenter.cancel()
-	destroyWorldInstances()
+	destroyRouteInstances()
+	destroyManualWorldInstances()
+	destroySharedWorldInstances()
 	if light ~= nil then
 		light:Destroy()
 		light = nil

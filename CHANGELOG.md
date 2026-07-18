@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added WP15-B1's authoritative Stage2-only World Pulse through Connector0–Connector3, with one pooled sequential route, Connector3 emphasis, reduced-motion and missing-route fallback, and no authored world-property changes.
 - Added WP15-A's authoritative Core-to-BaseRing response with one pooled presenter-owned Beam and BaseRing PointLight, exact-path fallback, rapid-input replacement, reduced-motion behavior, and no authored world-property changes.
 - Added the combined WP14-B1/B2 presentation batch: pooled Core contact/confirmed-energy response and a DataSync-authoritative World Awakening stage-transition orchestrator, with safe Core-only fallback, reduced-motion behavior, and no gameplay or server changes.
 - Increased WP14-B Core response visibility with a wider single-light range, lifted effect colors, and clearer contact, confirmed-reward, and major-event brightness while retaining one PointLight and one active Tween.

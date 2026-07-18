@@ -1,6 +1,6 @@
 # WP15 — The World Responds
 
-Status: WP15-A implemented; WP15-B remains design-only
+Status: WP15-A and WP15-B1 Stage2 World Pulse implemented; Stage3–Stage6 routing remains unapproved
 
 ## 1. Problem Statement
 
@@ -54,8 +54,8 @@ The response must remain calm enough to repeat at the maximum accepted PRESS rat
 
 ### Confirmed architectural baseline
 
-- WP15-A extends `EnergyPropagationPresenter` with the exact approved Stage1 `BaseRing`, one pooled Beam, and one pooled target light. Stage-directed routing remains unimplemented.
-- `WorldAwakeningPresenter` can request one undirected `playPropagation(color)` callback, but cannot specify the authoritative destination stage.
+- WP15-A extends `EnergyPropagationPresenter` with the exact approved Stage1 `BaseRing`, one pooled Beam, and one pooled target light.
+- WP15-B1 extends the same bounded pool with four Stage2 Connector Attachments and one reusable route/destination PointLight. `WorldAwakeningPresenter` passes the final authoritative stage through `playPropagation(color, destinationStage)`.
 - No target registry is required for WP15-A. The verified exact hierarchy is resolved once by `MainGuiClient` without scanning.
 - No new server or RemoteEvent information is required: valid `PressFeedback` distinguishes accepted manual PRESS, and positive `FactoryStageChanged` identifies the stage destination.
 
@@ -72,7 +72,7 @@ The response must remain calm enough to repeat at the maximum accepted PRESS rat
 | `Workspace.Interactive.EnergyCore.CoreInner` | Verified BasePart with click detector and particles | Approved Core host for presenter-owned children | Existing properties/children remain untouched |
 | `Workspace.Interactive.EnergyCore.CoreOuter` | Verified BasePart | Existing Core fallback only | WP15-A exact transfer origin remains resolved CoreInner when present |
 | `Workspace.FactoryEvolution.Stage1.BaseRing` | Verified BasePart | Approved WP15-A destination and `FactoryVisualController`-owned stable geometry | Presenter-owned Attachment/PointLight children only; no authored property writes |
-| `Workspace.FactoryEvolution.Stage2.Connector0`–`Connector3` | Verified BaseParts | WP15-B candidates only | No WP15-A resolution, references, or effects |
+| `Workspace.FactoryEvolution.Stage2.Connector0`–`Connector3` | Verified direct-child BaseParts | Approved WP15-B1 route and Connector3 destination | Presenter-owned Attachment/PointLight children only; no authored property writes |
 | Stage3–Stage6 targets | Not supplied or verified | Unknown | Do not invent paths |
 
 `BaseRing` is a world anchor, not a machine. It represents the smallest awakened world available at Stage1: accepted energy visibly leaves the Core and reaches the first stable world layer. This is more accurate than implying that an unverified generator or reactor is active.
@@ -108,10 +108,10 @@ Before WP15-B, perform this procedure in the authoritative test Place and save t
 | --- | --- | --- |
 | Core only | Yes, as already implemented | Presenter-owned PointLight child only |
 | Core plus Stage1 world anchor | Yes | Exact approved destination is `Workspace.FactoryEvolution.Stage1.BaseRing` |
-| Core plus Connector route | Not for WP15-A | `Connector0`–`Connector3` are WP15-B candidates only |
+| Core plus Connector route | Yes for Stage2 World Awakening only | Exact approved order is `Connector0` → `Connector1` → `Connector2` → `Connector3` |
 | Stage-specific activation targets | No | Stage folders are controller-owned and exact presentation-safe descendants are unconfirmed |
 
-WP15-A is approved as `CoreInner → BaseRing`. WP15-B remains gated on Connector ordering and stage-specific target approval.
+WP15-A is approved as `CoreInner → BaseRing`. WP15-B1 is approved only for `CoreInner → Connector0 → Connector1 → Connector2 → Connector3`, with `Connector3` as the Stage2 destination. Stage3–Stage6 remain Core-only until exact paths are verified and approved.
 
 ## 5. World-Response Visual Language
 
@@ -165,13 +165,13 @@ Target world-response duration: 2.10 seconds; acceptable range: 1.50–3.00 seco
 | --- | --- | --- |
 | 0.00–0.25s | Gather | Existing Core major gather; cancel/suppress ordinary PRESS world travel while exact PRESS UI can continue. |
 | 0.25–0.60s | Release | Existing Core release and existing internal audio request at 0.25s. Beam begins toward the approved near-world route anchor. |
-| 0.50–1.05s | World route | Reuse one Beam and target response in ordered hops only if exact approved anchors exist. Maximum two intermediate hops; no route discovery at event time. |
+| 0.28–0.88s | Stage2 world route | Reuse one Beam and route light across the four exact approved Connector segments in order. Only one segment responds at a time; no route discovery occurs at event time. Other stages render no route. |
 | 0.85–1.35s | Stage-directed answer | Move the pooled target response to the approved target mapped to the final authoritative `factoryStage`. It receives the strongest target-light response. Do not alter stage geometry or authored effects. |
 | 0.90s | Camera | Preserve existing `FactoryEra` FOV request. |
 | 0.95s | Notification | Preserve existing `WORLD AWAKENED! Awakening {n}: {name}` timing and priority. |
 | 1.35–2.10s | Settle | Beam disables; target light returns to zero; Core settles; pooled target references return to neutral. Stable Factory layer remains untouched. |
 
-If an exact stage target is unavailable, route to the approved near-world target and retain existing Core/camera/notification. Do not guess a stage descendant. If stages are skipped, map only the latest authoritative stage and play one sequence.
+For Stage2, an incomplete or invalid Connector route falls back to the existing Core/camera/notification presentation with no world route. For unverified Stage3–Stage6, retain the same Core/camera/notification presentation and render no Connector or BaseRing fallback. Do not guess a stage descendant. If stages are skipped, map only the latest authoritative stage and play one sequence.
 
 ## 8. Target Ownership and Module Boundaries
 
@@ -184,18 +184,18 @@ It remains the correct owner because it already owns Core response primitives, c
 - one near-world route;
 - no stage mapping in WP15-A;
 - manual `presentManual(payload)` world response;
-- existing `playMajor(color)` remains Core-only and cancels manual world response;
+- `playMajor(color, destinationStage)` always retains the Core response, cancels manual world response, and adds the route only when `destinationStage == 2`;
 - independent bounded Core and world Tween slots, with one Core Tween maximum preserved.
 
 It must not discover semantic stage state, subscribe to coordinator events, select rewards, own stable atmosphere, or write authored target properties.
 
 ### `WorldAwakeningPresenter` — retain orchestration
 
-WP15-A leaves its callback and timing unchanged. Its existing `cancelPropagation()` then `playPropagation()` sequence cancels and neutralizes manual Beam/BaseRing response before major Core presentation.
+The existing `cancelPropagation()` then `playPropagation(color, destinationStage)` sequence cancels and neutralizes manual Beam/BaseRing response before major Core presentation. WP15-B1 preserves the World Awakening audio, camera, and notification schedule.
 
 ### Narrow `WorldResponseTargetRegistry` — justified after audit
 
-A data-only provider becomes justified if WP15-B has one near target plus stage-specific targets. It prevents `MainGuiClient` and effect code from duplicating exact Workspace paths and safety checks.
+A data-only provider becomes justified only when several separately approved stage routes would otherwise duplicate exact Workspace paths and safety checks. WP15-B1 has one fixed Stage2 route, so direct composition remains smaller.
 
 Responsibilities:
 
@@ -205,7 +205,7 @@ Responsibilities:
 - exclude missing/mismatched targets without scanning alternatives;
 - create no effects, own no state, subscribe to nothing, and mutate nothing.
 
-For WP15-A with only one approved near target, direct injection from `MainGuiClient` is smaller and preferred. Add the registry in WP15-B only when the approved target count/paths justify it.
+Direct injection from `MainGuiClient` remains preferred for WP15-A and the single fixed WP15-B1 route. Do not add a registry until additional exact stage mappings justify it.
 
 ### Preserved owners
 
@@ -310,7 +310,7 @@ Until an explicit quality preference exists, the initial WP15-A implementation u
 - no dynamic authored light control;
 - semantic-event updates only.
 
-WP15-B may add up to two route hops on full quality only after mobile profiling. Low-end remains direct Core-to-final-target with one Beam and one target pulse. Do not infer low-end from device type inside a presenter.
+WP15-B1 reuses one Beam across four ordered Stage2 segments, so only one segment is visible at a time. Reduced motion removes all travel and intermediate pulses, retaining at most one brief Connector3 response. Do not infer a separate quality tier from device type inside a presenter.
 
 ## 15. Performance Budgets
 
@@ -318,8 +318,8 @@ Per-client WP15 ceilings, excluding existing WP14 Core light/UI presenters:
 
 | Resource | WP15-A ceiling | WP15-B full ceiling | Reduced/low-end | Rule |
 | --- | --- | --- | --- | --- |
-| Cached authored targets | 2: Core + near | 10: Core + near + max 2 routes + 6 stages | 2–8 resolved refs | Exact allowlist only |
-| Presenter-owned instances | 4: 2 Attachments + 1 Beam + 1 target PointLight | 4 preferred; hard max 8 if fixed endpoints are required | Max 4 | Created once, zero per PRESS |
+| Cached authored targets | 2: Core + near | 6: Core + BaseRing + four Stage2 Connectors | 2–6 resolved refs | Exact allowlist only |
+| Presenter-owned world instances | 4: 2 Attachments + 1 Beam + 1 target PointLight | 9: shared Core Attachment/Beam + BaseRing Attachment/light + four Connector Attachments + one route light | Same instances; fewer active effects | Created once, zero per event |
 | Active WP15 Tweens | 2 world + existing 1 Core = 3 total | 2 world + existing 1 Core = 3 total | Max 1 world + Core | Separate replaceable slots; no queue |
 | Lights | Existing 1 Core + 1 WP15 target | Same | Target light only; no shadows | Never one per target unless separately approved within hard instance cap |
 | Beams | 1 active/owned | 1 active/owned | 0 or 1 static | Reuse by retargeting approved attachments |
@@ -342,21 +342,22 @@ Approved target: `Workspace.FactoryEvolution.Stage1.BaseRing`.
 5. Add missing-target, rapid input, reduced-motion, teardown, and property-integrity tests.
 6. Profile on narrow mobile before enabling any stage routes.
 
-### WP15-B — Stage-directed World Awakening propagation
+### WP15-B1 — Stage2 World Pulse
 
-Gate: approve the order/meaning of Stage2 `Connector0`–`Connector3` and exact stage-specific destinations. Do not invent Stage3–Stage6 paths.
+Approved route: `CoreInner → Connector0 → Connector1 → Connector2 → Connector3`. `Connector3` is the final Stage2 response target. Do not invent Stage3–Stage6 paths and do not redirect those stages to BaseRing.
 
-1. Add a data-only target registry if multiple exact paths are approved.
+1. Resolve all four direct-child Connector BaseParts once during composition; reject the complete route if any member is absent or mismatched.
 2. Change the major callback to carry destination stage without renaming the semantic event.
-3. Extend the existing major timeline with at most two route hops and the strongest response at the final approved stage target.
+3. Reuse the existing Beam and one route PointLight across four ordered segments, with presenter-owned Attachments at the Core and each Connector.
 4. Preserve existing 0.25/0.90/0.95 audio/camera/notification coordination.
-5. Validate skipped stages, rapid snapshots, rejoin, missing per-stage target, and every available stage.
+5. Render the route only for a positive authoritative change whose final stage is exactly 2.
+6. Validate skipped stages, rapid snapshots, rejoin, missing Connector, reduced motion, cancellation, and authored-property integrity.
 
 ### Batch recommendation
 
 Implement separately based on current evidence. WP15-A establishes the reusable world-target pool and restoration behavior with one approved target and high-frequency load. WP15-B adds authoritative stage routing only after WP15-A passes mobile and lifecycle validation and Studio identifies safe stage targets.
 
-WP15-A proceeds independently with BaseRing. Do not combine WP15-B until Connector order and later-stage targets are verified.
+WP15-B1 proceeds only with the approved Stage2 route. Later WP15-B stages remain separate until their exact targets and route order are verified.
 
 ## 17. Exact Files Likely to Change
 
@@ -408,7 +409,7 @@ Expected unchanged: `FactoryVisualController.lua`, `PresentationCoordinator.lua`
 | Beam reads as weapon/laser | Medium | Thin energy-transfer language, short duration, soft lifted stage/rarity color, no impact burst |
 | PRESS becomes too similar to Awakening | High | One local target and ≤0.75s for PRESS; stage destination, stronger light, camera/notification only for Awakening |
 | Mobile overdraw | High | One Beam, two total presentation lights including Core, no particles/shadows, hard budgets |
-| Partial stage mapping misdirects response | High | Explicit near-target fallback; never choose arbitrary Stage descendant |
+| Partial stage mapping misdirects response | High | Stage2 requires all four approved Connectors; Stage3–Stage6 render no route or BaseRing fallback |
 | Binary string evidence treated as hierarchy | High | Mark tokens as hints only; require Explorer path/Class/property proof |
 | B3 scope leaks into WP15 | Medium | Semantic events only; no persistent/periodic state or ambience APIs |
 
@@ -461,4 +462,4 @@ Studio-only items remain unchecked until executed.
 
 ## Implementation Gate
 
-WP15-A target approval is satisfied by `Workspace.FactoryEvolution.Stage1.BaseRing`. Do not begin WP15-B until Connector route order and exact later-stage destinations are approved; Stage3–Stage6 paths remain intentionally unspecified.
+WP15-A target approval is satisfied by `Workspace.FactoryEvolution.Stage1.BaseRing`. WP15-B1 approval is limited to the exact Stage2 Connector0–Connector3 route and Connector3 destination. Stage3–Stage6 paths remain intentionally unspecified and receive no guessed route or BaseRing fallback.

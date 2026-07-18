@@ -5,7 +5,7 @@ local PresentationCoordinator = require(script.Parent.PresentationCoordinator)
 export type Dependencies = {
 	read getAwakeningName: (stage: number) -> string,
 	read getAwakeningColor: (stage: number) -> Color3,
-	read playPropagation: (color: Color3) -> (),
+	read playPropagation: (color: Color3, destinationStage: number) -> (),
 	read cancelPropagation: () -> (),
 	read showMajor: (text: string, color: Color3) -> (),
 	read playAudio: () -> (),
@@ -50,7 +50,7 @@ local function onEvent(event: PresentationCoordinator.PresentationEvent)
 	local stage = event.factoryStage
 	local name = configured.getAwakeningName(stage)
 	local color = configured.getAwakeningColor(stage)
-	configured.playPropagation(color)
+	configured.playPropagation(color, stage)
 
 	local reducedMotion = configured.getReducedMotion()
 	local audioDelay = if reducedMotion then 0 else AUDIO_SECONDS

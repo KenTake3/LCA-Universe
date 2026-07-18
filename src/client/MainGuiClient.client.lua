@@ -120,6 +120,26 @@ local function findBaseRing(): BasePart?
 	return baseRing
 end
 
+local function findStage2Route(): { BasePart }?
+	local factoryEvolution = workspace:FindFirstChild("FactoryEvolution")
+	if factoryEvolution == nil or (not factoryEvolution:IsA("Folder") and not factoryEvolution:IsA("Model")) then
+		return nil
+	end
+	local stage2 = factoryEvolution:FindFirstChild("Stage2")
+	if stage2 == nil or (not stage2:IsA("Folder") and not stage2:IsA("Model")) then
+		return nil
+	end
+	local route: { BasePart } = {}
+	for index = 0, 3 do
+		local connector = stage2:FindFirstChild("Connector" .. index)
+		if connector == nil or not connector:IsA("BasePart") or connector.Parent ~= stage2 then
+			return nil
+		end
+		table.insert(route, connector)
+	end
+	return route
+end
+
 local presentationCorePart = findCorePart()
 local presentationWorldTarget = if presentationCorePart ~= nil and presentationCorePart.Name == "CoreInner"
 	then findBaseRing()
@@ -129,6 +149,9 @@ EnergyPropagationPresenter.init({
 	tweenService = TweenService,
 	corePart = presentationCorePart,
 	worldTarget = presentationWorldTarget,
+	stage2Route = if presentationCorePart ~= nil and presentationCorePart.Name == "CoreInner"
+		then findStage2Route()
+		else nil,
 	getReducedMotion = PresentationPreferences.getReducedMotion,
 	subscribeReducedMotion = PresentationPreferences.subscribe,
 })
@@ -1135,8 +1158,8 @@ WorldAwakeningPresenter.init({
 	getAwakeningColor = function(stage)
 		return FactoryDefinitions.getStage(stage).coreColor
 	end,
-	playPropagation = function(color)
-		EnergyPropagationPresenter.playMajor(color)
+	playPropagation = function(color, destinationStage)
+		EnergyPropagationPresenter.playMajor(color, destinationStage)
 	end,
 	cancelPropagation = EnergyPropagationPresenter.cancel,
 	showMajor = function(text, color)
