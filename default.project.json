@@ -37,6 +37,50 @@
 
         "MainGuiClient": {
           "$path": "src/client/MainGuiClient.client.lua"
+        },
+
+        "FactoryVisualController": {
+          "$path": "src/client/FactoryVisualController.lua"
+        },
+
+        "PresentationCoordinator": {
+          "$path": "src/client/PresentationCoordinator.lua"
+        },
+
+        "PressPresenter": {
+          "$path": "src/client/PressPresenter.lua"
+        },
+
+        "PresentationPreferences": {
+          "$path": "src/client/PresentationPreferences.lua"
+        },
+
+        "NotificationPresenter": {
+          "$path": "src/client/NotificationPresenter.lua"
+        },
+
+        "AudioPresenter": {
+          "$path": "src/client/AudioPresenter.lua"
+        },
+
+        "CameraPresenter": {
+          "$path": "src/client/CameraPresenter.lua"
+        },
+
+        "UpgradePresenter": {
+          "$path": "src/client/UpgradePresenter.lua"
+        },
+
+        "RebirthPresenter": {
+          "$path": "src/client/RebirthPresenter.lua"
+        },
+
+        "EnergyPropagationPresenter": {
+          "$path": "src/client/EnergyPropagationPresenter.lua"
+        },
+
+        "WorldAwakeningPresenter": {
+          "$path": "src/client/WorldAwakeningPresenter.lua"
         }
       }
     }

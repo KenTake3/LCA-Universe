@@ -17,6 +17,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local MarketplaceService = game:GetService("MarketplaceService")
+local SoundService = game:GetService("SoundService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -27,6 +28,88 @@ local NumberFormatter = require(ReplicatedStorage.LCA_Shared.NumberFormatter)
 local UpgradeDefinitions = require(ReplicatedStorage.LCA_Shared.UpgradeDefinitions)
 local FactoryDefinitions = require(ReplicatedStorage.LCA_Shared.FactoryDefinitions)
 local QuestDefinitions = require(ReplicatedStorage.LCA_Shared.QuestDefinitions)
+local FactoryVisualController = require(script.Parent.FactoryVisualController)
+local PresentationCoordinator = require(script.Parent.PresentationCoordinator)
+local PressPresenter = require(script.Parent.PressPresenter)
+local PresentationPreferences = require(script.Parent.PresentationPreferences)
+local NotificationPresenter = require(script.Parent.NotificationPresenter)
+local AudioPresenter = require(script.Parent.AudioPresenter)
+local CameraPresenter = require(script.Parent.CameraPresenter)
+local UpgradePresenter = require(script.Parent.UpgradePresenter)
+local RebirthPresenter = require(script.Parent.RebirthPresenter)
+local EnergyPropagationPresenter = require(script.Parent.EnergyPropagationPresenter)
+local WorldAwakeningPresenter = require(script.Parent.WorldAwakeningPresenter)
+
+local AWAKENING_DISPLAY = table.freeze({
+	table.freeze({
+		name = "Core Awakening",
+		description = "The Core stirs and energy begins to flow.",
+	}),
+	table.freeze({
+		name = "Energy Rising",
+		description = "Power begins spreading beyond the Core.",
+	}),
+	table.freeze({
+		name = "World in Motion",
+		description = "The awakened world begins moving as one.",
+	}),
+	table.freeze({
+		name = "Resonant World",
+		description = "The Core’s energy transforms the world around it.",
+	}),
+	table.freeze({
+		name = "Radiant Horizon",
+		description = "Light and power spread across the visible world.",
+	}),
+	table.freeze({
+		name = "Quantum Awakening",
+		description = "The world reaches its highest available awakening.",
+	}),
+})
+
+local UPGRADE_DISPLAY_DESCRIPTIONS = table.freeze({
+	CoreAmplifier = "Amplify the Core's energy output.",
+	Luck = "Improve the chance of higher rarity rewards.",
+})
+
+local function getAwakeningDisplay(stage: number)
+	return AWAKENING_DISPLAY[stage] or AWAKENING_DISPLAY[1]
+end
+
+PresentationCoordinator.init()
+AudioPresenter.init({ soundParent = SoundService })
+CameraPresenter.init({
+	tweenService = TweenService,
+	getCurrentCamera = function()
+		return workspace.CurrentCamera
+	end,
+	getReducedMotion = PresentationPreferences.getReducedMotion,
+	subscribeReducedMotion = PresentationPreferences.subscribe,
+})
+
+local function findCorePart(): BasePart?
+	local interactive = workspace:FindFirstChild("Interactive")
+	local energyCore = if interactive ~= nil then interactive:FindFirstChild("EnergyCore") else nil
+	if energyCore == nil then
+		return nil
+	end
+	local inner = energyCore:FindFirstChild("CoreInner")
+	if inner ~= nil and inner:IsA("BasePart") then
+		return inner
+	end
+	local outer = energyCore:FindFirstChild("CoreOuter")
+	if outer ~= nil and outer:IsA("BasePart") then
+		return outer
+	end
+	return nil
+end
+
+EnergyPropagationPresenter.init({
+	tweenService = TweenService,
+	corePart = findCorePart(),
+	getReducedMotion = PresentationPreferences.getReducedMotion,
+	subscribeReducedMotion = PresentationPreferences.subscribe,
+})
 
 -- ============================================================
 -- Remotes
@@ -40,10 +123,8 @@ local requestRebirthEvent = remotes:WaitForChild("RequestRebirth")
 local dataSyncEvent = remotes:WaitForChild("DataSync")
 local pressFeedbackEvent = remotes:WaitForChild("PressFeedback")
 local rarityBroadcastEvent = remotes:WaitForChild("RarityBroadcast")
-local factoryEvolutionSync = remotes:WaitForChild("FactoryEvolutionSync")
 local questActionEvent = remotes:WaitForChild("QuestAction")
 local questSyncEvent = remotes:WaitForChild("QuestSync")
-local notificationEvent = remotes:FindFirstChild("Notification")
 
 -- ============================================================
 -- Color Theme
@@ -160,6 +241,10 @@ local clientData = {
 	QuestStats = {},
 }
 
+local function currentRebirthCost()
+	return Config.getRebirthCost(clientData.Rebirths)
+end
+
 -- ============================================================
 -- Build TopBar
 -- ============================================================
@@ -186,7 +271,7 @@ energySubtitle.Size = UDim2.new(0, 200, 0, 18)
 -- Game title below TopBar
 local titleLabel = makeGui("TextLabel", {
 	Name = "GameTitle",
-	Text = "LUCKY CORE FACTORY",
+	Text = "LCA UNIVERSE",
 	TextSize = 14,
 	Size = UDim2.new(0, 250, 0, 22),
 	Position = UDim2.new(0.5, -125, 0, 62),
@@ -204,10 +289,10 @@ titleCorner.Parent = titleLabel
 -- Factory Evolution stage label (below title)
 local factoryStageLabel = makeGui("TextLabel", {
 	Name = "FactoryStageLabel",
-	Text = "Stage 1: Core Online",
+	Text = "Awakening 1: Core Awakening",
 	TextSize = 12,
-	Size = UDim2.new(0, 200, 0, 18),
-	Position = UDim2.new(0.5, -100, 0, 86),
+	Size = UDim2.new(0, 420, 0, 18),
+	Position = UDim2.new(0.5, -210, 0, 86),
 	BackgroundColor3 = COLORS.panel,
 	BackgroundTransparency = 0.3,
 	TextColor3 = COLORS.accent,
@@ -270,6 +355,17 @@ local pressRing = makeGui("Frame", {
 local ringCorner = Instance.new("UICorner")
 ringCorner.CornerRadius = UDim.new(1, 0)
 ringCorner.Parent = pressRing
+
+PressPresenter.init({
+	button = pressButton,
+	popupParent = screenGui,
+	tweenService = TweenService,
+	formatNumber = NumberFormatter.format,
+	playAudio = function(cue)
+		AudioPresenter.play(cue)
+	end,
+	getReducedMotion = PresentationPreferences.getReducedMotion,
+})
 
 -- ============================================================
 -- Build Navigation Buttons (bottom-left)
@@ -377,7 +473,8 @@ for i, upgrade in ipairs(Config.Upgrades) do
 	nameLabel.Size = UDim2.new(1, -100, 0, 20)
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	
-	local descLabel = makeText(entry, upgrade.description, 11, UDim2.new(0, 12, 0, 22), COLORS.textDim, Enum.Font.Gotham)
+	local displayDescription = UPGRADE_DISPLAY_DESCRIPTIONS[upgrade.id] or upgrade.description
+	local descLabel = makeText(entry, displayDescription, 11, UDim2.new(0, 12, 0, 22), COLORS.textDim, Enum.Font.Gotham)
 	descLabel.Size = UDim2.new(1, -100, 0, 16)
 	descLabel.TextXAlignment = Enum.TextXAlignment.Left
 	
@@ -398,12 +495,24 @@ for i, upgrade in ipairs(Config.Upgrades) do
 	}
 end
 
+UpgradePresenter.init({
+	getCard = function(upgradeId)
+		return upgradeButtons[upgradeId]
+	end,
+	tweenService = TweenService,
+	playAudio = function()
+		AudioPresenter.play("UpgradeConfirmed")
+	end,
+	getReducedMotion = PresentationPreferences.getReducedMotion,
+})
+
 -- ============================================================
 -- Build Rebirth Panel
 -- ============================================================
 local rebirthPanel = makePanel("RebirthPanel", UDim2.new(0, 280, 0, 280), UDim2.new(0.5, -140, 0.5, -140))
 
 local rebirthTitle = makeText(rebirthPanel, "REBIRTH", 20, UDim2.new(0, 0, 0, 10), COLORS.purple, Enum.Font.GothamBlack)
+rebirthTitle.Size = UDim2.new(1, 0, 0, 30)
 
 local rebirthClose = makeGui("TextButton", {
 	Text = "X",
@@ -966,41 +1075,59 @@ notifLayout.Padding = UDim.new(0, 5)
 notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
 notifLayout.Parent = notifContainer
 
--- ============================================================
--- Notification System
--- ============================================================
+NotificationPresenter.init({
+	container = notifContainer,
+	tweenService = TweenService,
+	textColor = COLORS.text,
+})
 
-local notifOrder = 0
-local function showNotification(text, color)
-	notifOrder = notifOrder + 1
-	local notif = makeGui("TextLabel", {
-		Text = text,
-		TextSize = 14,
-		Size = UDim2.new(1, 0, 0, 35),
-		BackgroundColor3 = color or COLORS.panel,
-		TextColor3 = COLORS.text,
-		Font = Enum.Font.GothamBold,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		LayoutOrder = notifOrder,
-	}, notifContainer)
-	local nc = Instance.new("UICorner")
-	nc.CornerRadius = UDim.new(0, 6)
-	nc.Parent = notif
-	
-	-- Fade in then out
-	notif.BackgroundTransparency = 1
-	notif.TextTransparency = 1
-	
-	TweenService:Create(notif, TweenInfo.new(0.2), { BackgroundTransparency = 0.2, TextTransparency = 0 }):Play()
-	
-	task.delay(3, function()
-		local fadeTween = TweenService:Create(notif, TweenInfo.new(0.5), { BackgroundTransparency = 1, TextTransparency = 1 })
-		fadeTween:Play()
-		fadeTween.Completed:Connect(function()
-			notif:Destroy()
-		end)
-	end)
-end
+RebirthPresenter.init({
+	rebirthsLabel = rebirthsLabel,
+	multiplierLabel = rebirthMultLabel,
+	tweenService = TweenService,
+	showRoutine = function(text, color)
+		NotificationPresenter.showRoutine(text, color)
+	end,
+	showMajor = function(text, color)
+		NotificationPresenter.showMajorProgression(text, color)
+	end,
+	getFactoryName = function(stage)
+		return getAwakeningDisplay(stage).name
+	end,
+	getFactoryColor = function(stage)
+		return FactoryDefinitions.getStage(stage).coreColor
+	end,
+	playAudio = function(majorFactoryEra)
+		AudioPresenter.play(if majorFactoryEra then "FactoryEra" else "RebirthConfirmed")
+	end,
+	playCamera = function(majorFactoryEra)
+		CameraPresenter.play(if majorFactoryEra then "FactoryEra" else "RebirthConfirmed")
+	end,
+	getReducedMotion = PresentationPreferences.getReducedMotion,
+})
+
+WorldAwakeningPresenter.init({
+	getAwakeningName = function(stage)
+		return getAwakeningDisplay(stage).name
+	end,
+	getAwakeningColor = function(stage)
+		return FactoryDefinitions.getStage(stage).coreColor
+	end,
+	playPropagation = function(color)
+		EnergyPropagationPresenter.playMajor(color)
+	end,
+	cancelPropagation = EnergyPropagationPresenter.cancel,
+	showMajor = function(text, color)
+		NotificationPresenter.showMajorProgression(text, color)
+	end,
+	playAudio = function()
+		AudioPresenter.play("FactoryEra")
+	end,
+	playCamera = function()
+		CameraPresenter.play("FactoryEra")
+	end,
+	getReducedMotion = PresentationPreferences.getReducedMotion,
+})
 
 -- ============================================================
 -- Data Sync Handler
@@ -1008,7 +1135,9 @@ end
 
 dataSyncEvent.OnClientEvent:Connect(function(data)
 	if not data then return end
-	
+
+	FactoryVisualController.reconcile(data.FactoryStage, data.Rebirths)
+
 	-- Update client data cache
 	clientData.Energy = data.Energy or clientData.Energy
 	clientData.LifetimeEnergy = data.LifetimeEnergy or clientData.LifetimeEnergy
@@ -1029,6 +1158,7 @@ dataSyncEvent.OnClientEvent:Connect(function(data)
 	clientData.PurchasedPerks = data.PurchasedPerks or clientData.PurchasedPerks
 	
 	updateUI()
+	PresentationCoordinator.processDataSync(data)
 end)
 
 -- ============================================================
@@ -1039,10 +1169,11 @@ function updateUI()
 	-- TopBar
 	energyLabel.Text = NumberFormatter.format(clientData.Energy)
 	
-	-- Factory Evolution stage display
+	-- Player-facing World Awakening display; internal Factory contracts remain unchanged.
 	local stage = clientData.HighestFactoryStage or 1
 	local stageInfo = FactoryDefinitions.getStage(stage)
-	factoryStageLabel.Text = "Stage " .. stage .. ": " .. stageInfo.name
+	local awakeningDisplay = getAwakeningDisplay(stage)
+	factoryStageLabel.Text = "Awakening " .. stage .. ": " .. awakeningDisplay.name
 	factoryStageLabel.TextColor3 = stageInfo.coreColor
 	
 	-- Show progress toward next stage
@@ -1050,9 +1181,9 @@ function updateUI()
 	if nextStage then
 		local progress = FactoryDefinitions.getProgress(stage, clientData.LifetimeEnergy or 0, clientData.Rebirths or 0)
 		local pct = math.floor(progress * 100)
-		local nextName = nextStage.name
+		local nextName = getAwakeningDisplay(nextStage.stage).name
 		local reqText = nextStage.rebirthsRequired > 0 and clientData.Rebirths >= nextStage.rebirthsRequired
-			and ("Unlocked via Rebirths!")
+			and ("Next awakening available through Rebirth.")
 			or (pct .. "% to " .. nextName)
 		factoryStageLabel.Text = factoryStageLabel.Text .. " (" .. reqText .. ")"
 	end
@@ -1129,7 +1260,7 @@ function updateUI()
 	end
 	
 	-- Rebirth panel
-	local rebirthCost = Config.getRebirthCost(clientData.Rebirths)
+	local rebirthCost = currentRebirthCost()
 	local rebirthMult = Config.getRebirthMultiplier(clientData.Rebirths + 1)
 	rebirthCostLabel.Text = "Cost: " .. NumberFormatter.format(rebirthCost) .. " Energy"
 	rebirthMultLabel.Text = "New Multiplier: x" .. string.format("%.2f", rebirthMult)
@@ -1256,24 +1387,9 @@ end
 
 -- Press button (fires RemoteEvent)
 pressButton.MouseButton1Click:Connect(function()
+	PressPresenter.playContact()
+	EnergyPropagationPresenter.playContact()
 	pressCoreEvent:FireServer()
-	
-	-- Visual press effect
-	local originalSize = pressButton.Size
-	local tween = TweenService:Create(
-		pressButton,
-		TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Size = UDim2.new(0, 100, 0, 100) }
-	)
-	tween:Play()
-	tween.Completed:Connect(function()
-		local returnTween = TweenService:Create(
-			pressButton,
-			TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ Size = originalSize }
-		)
-		returnTween:Play()
-	end)
 end)
 
 -- Upgrade button connections
@@ -1288,6 +1404,10 @@ end
 
 -- Rebirth confirm
 rebirthConfirmBtn.MouseButton1Click:Connect(function()
+	if clientData.Energy < currentRebirthCost() then
+		NotificationPresenter.showFailure("Not enough Energy to Rebirth", COLORS.danger)
+		return
+	end
 	requestRebirthEvent:FireServer()
 end)
 
@@ -1315,75 +1435,30 @@ end
 -- ============================================================
 
 pressFeedbackEvent.OnClientEvent:Connect(function(feedback)
-	if not feedback then return end
-	
-	local reward = feedback.reward or 0
-	local rarityName = feedback.rarityName or "COMMON"
-	local rarityColor = feedback.rarityColor or Color3.fromRGB(200, 200, 200)
-	local rarityIndex = feedback.rarityIndex or 1
-	
-	-- Determine display size and popup text based on 8-tier system
-	local displayColor = rarityColor
-	local displaySize = 18
-	local popupText = "+" .. NumberFormatter.format(reward)
-	
-	if rarityIndex >= 8 then -- JACKPOT
-		displaySize = 40
-		popupText = "JACKPOT!!! +" .. NumberFormatter.format(reward) .. " ENERGY!!!"
-	elseif rarityIndex >= 7 then -- COSMIC
-		displaySize = 36
-		popupText = rarityName .. "! +" .. NumberFormatter.format(reward)
-	elseif rarityIndex >= 6 then -- MYTHIC
-		displaySize = 32
-		popupText = rarityName .. "! +" .. NumberFormatter.format(reward)
-	elseif rarityIndex >= 5 then -- LEGENDARY
-		displaySize = 30
-		popupText = rarityName .. "! +" .. NumberFormatter.format(reward)
-	elseif rarityIndex >= 4 then -- EPIC
-		displaySize = 26
-		popupText = rarityName .. "! +" .. NumberFormatter.format(reward)
-	elseif rarityIndex >= 3 then -- RARE
-		displaySize = 24
-		popupText = rarityName .. "! +" .. NumberFormatter.format(reward)
-	elseif rarityIndex >= 2 then -- UNCOMMON
-		displaySize = 20
-		popupText = rarityName .. " +" .. NumberFormatter.format(reward)
+	if type(feedback) ~= "table" then return end
+	local rarityName = feedback.rarityName
+	local rarityColor = feedback.rarityColor
+	local rarityIndex = feedback.rarityIndex
+	if type(rarityName) ~= "string"
+		or rarityName == ""
+		or typeof(rarityColor) ~= "Color3"
+		or type(rarityIndex) ~= "number"
+		or rarityIndex ~= rarityIndex
+		or rarityIndex == math.huge
+		or rarityIndex == -math.huge
+		or rarityIndex ~= math.floor(rarityIndex)
+		or rarityIndex < 1
+		or rarityIndex > 8
+		or not PressPresenter.presentConfirmedReward(feedback)
+	then
+		return
 	end
-	
-	-- Show floating popup near the press button
-	local popup = makeGui("TextLabel", {
-		Text = popupText,
-		TextSize = displaySize,
-		Size = UDim2.new(0, 400, 0, 40),
-		Position = UDim2.new(0.5, -200, 1, -180),
-		BackgroundColor3 = Color3.fromRGB(0, 0, 0),
-		BackgroundTransparency = 1,
-		TextColor3 = displayColor,
-		Font = Enum.Font.GothamBlack,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		TextYAlignment = Enum.TextYAlignment.Center,
-	}, screenGui)
-	
-	-- Animate popup upward and fade
-	local moveTween = TweenService:Create(
-		popup,
-		TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Position = UDim2.new(0.5, -200, 1, -260), TextTransparency = 1, BackgroundTransparency = 1 }
-	)
-	
-	-- Fade in first
-	popup.TextTransparency = 0.5
-	TweenService:Create(popup, TweenInfo.new(0.1), { TextTransparency = 0 }):Play()
-	
-	task.wait(0.1)
-	moveTween:Play()
-	moveTween.Completed:Connect(function()
-		popup:Destroy()
-	end)
-	
+	local reward = feedback.reward
+	EnergyPropagationPresenter.presentManual(feedback)
+
 	-- RARE+ rarity notification
 	if rarityIndex >= 3 then
-		showNotification(rarityName .. "! +" .. NumberFormatter.format(reward) .. " Energy!", rarityColor)
+		NotificationPresenter.showRoutine(rarityName .. "! +" .. NumberFormatter.format(reward) .. " Energy!", rarityColor)
 	end
 
 	-- JACKPOT special: full-screen overlay + big center text
@@ -1469,30 +1544,7 @@ rarityBroadcastEvent.OnClientEvent:Connect(function(broadcast)
 	
 	-- Show broadcast notification to all players
 	local notifText = playerName .. " rolled " .. rarityName .. "! (" .. NumberFormatter.format(reward) .. " Energy)"
-	showNotification(notifText, rarityColor)
-end)
-
--- ============================================================
--- Factory Evolution Sync Handler
--- ============================================================
-
-factoryEvolutionSync.OnClientEvent:Connect(function(data)
-	if not data then return end
-	
-	-- Server-wide stage update
-	if data.serverStage then
-		local stageInfo = FactoryDefinitions.getStage(data.serverStage)
-		showNotification("Factory evolved to Stage " .. data.serverStage .. ": " .. (data.stageName or stageInfo.name), stageInfo.coreColor)
-	end
-	
-	-- Player-specific stage upgrade
-	if data.isUpgrade and data.playerStage then
-		local stageInfo = FactoryDefinitions.getStage(data.playerStage)
-		showNotification("FACTORY UPGRADE! Stage " .. data.playerStage .. ": " .. (data.stageName or stageInfo.name), stageInfo.coreColor)
-		if data.stageDescription then
-			showNotification(data.stageDescription, COLORS.text)
-		end
-	end
+	NotificationPresenter.showRoutine(notifText, rarityColor)
 end)
 
 -- ============================================================
@@ -1518,4 +1570,4 @@ while not player:GetAttribute("DataLoaded") and attempts < 60 do
 end
 
 updateUI()
-showNotification("Welcome to Lucky Core Factory!", COLORS.accent)
+NotificationPresenter.showRoutine("Welcome to LCA Universe. Awaken the Core.", COLORS.accent)
