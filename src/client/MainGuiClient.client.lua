@@ -104,9 +104,31 @@ local function findCorePart(): BasePart?
 	return nil
 end
 
+local function findBaseRing(): BasePart?
+	local factoryEvolution = workspace:FindFirstChild("FactoryEvolution")
+	if factoryEvolution == nil or (not factoryEvolution:IsA("Folder") and not factoryEvolution:IsA("Model")) then
+		return nil
+	end
+	local stage1 = factoryEvolution:FindFirstChild("Stage1")
+	if stage1 == nil or (not stage1:IsA("Folder") and not stage1:IsA("Model")) then
+		return nil
+	end
+	local baseRing = stage1:FindFirstChild("BaseRing")
+	if baseRing == nil or not baseRing:IsA("BasePart") then
+		return nil
+	end
+	return baseRing
+end
+
+local presentationCorePart = findCorePart()
+local presentationWorldTarget = if presentationCorePart ~= nil and presentationCorePart.Name == "CoreInner"
+	then findBaseRing()
+	else nil
+
 EnergyPropagationPresenter.init({
 	tweenService = TweenService,
-	corePart = findCorePart(),
+	corePart = presentationCorePart,
+	worldTarget = presentationWorldTarget,
 	getReducedMotion = PresentationPreferences.getReducedMotion,
 	subscribeReducedMotion = PresentationPreferences.subscribe,
 })

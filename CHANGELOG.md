@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added WP15-A's authoritative Core-to-BaseRing response with one pooled presenter-owned Beam and BaseRing PointLight, exact-path fallback, rapid-input replacement, reduced-motion behavior, and no authored world-property changes.
 - Added the combined WP14-B1/B2 presentation batch: pooled Core contact/confirmed-energy response and a DataSync-authoritative World Awakening stage-transition orchestrator, with safe Core-only fallback, reduced-motion behavior, and no gameplay or server changes.
 - Increased WP14-B Core response visibility with a wider single-light range, lifted effect colors, and clearer contact, confirmed-reward, and major-event brightness while retaining one PointLight and one active Tween.
 - Added WP14-A World Awakening player-facing terminology for the title, welcome, six awakening stages, progress status, major stage notification, and relevant upgrade descriptions while preserving all internal Factory contracts and gameplay behavior.
